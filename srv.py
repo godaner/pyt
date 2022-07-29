@@ -48,7 +48,7 @@ class Srv:
         while 1:
             try:
                 trans_conn, addr = listen.accept()
-                threading.Thread(target=self.__handle_trans_conn, args=(trans_conn, addr)).start()
+                threading.Thread(target=self.__handle_trans_conn, args=(trans_conn,)).start()
             except BaseException as e:
                 self.logger.error("listen accept trans_conn err: {0}".format(e))
                 try:
@@ -59,7 +59,8 @@ class Srv:
                 self.__when_listen_close()
                 raise e
 
-    def __handle_trans_conn(self, trans_conn: socket.socket, trans_conn_addr):
+    def __handle_trans_conn(self, trans_conn: socket.socket):
+        trans_conn_addr = trans_conn.getpeername()
         remote_conn = socket.socket()
         try:
             remote_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -77,14 +78,14 @@ class Srv:
                     raise Exception("EOF")
                 remote_conn.send(bs)
         except BaseException as e:
-            self.logger.error("recv trans_conn conn err: {0}".format(e))
             self.logger.error(
-                "closing accept {}:{} <-> {}:{}".format(trans_conn_addr[0], trans_conn_addr[1], self.local_host,
-                                                        self.local_port))
+                "closing accept {}:{} <-> {}:{}, {}".format(trans_conn_addr[0], trans_conn_addr[1], self.local_host,
+                                                            self.local_port, e))
             try:
                 self.logger.error(
-                    "closing relay {}:{} <-> {}:{}".format(remote_conn_addr[0], remote_conn_addr[1], self.server_host,
-                                                           self.server_port))
+                    "closing relay {}:{} <-> {}:{}, {}".format(remote_conn_addr[0], remote_conn_addr[1],
+                                                               self.server_host,
+                                                               self.server_port, e))
             except BaseException as ee:
                 ...
             try:
@@ -106,7 +107,6 @@ class Srv:
                     raise Exception("EOF")
                 trans_conn.send(bs)
         except BaseException as e:
-            self.logger.error("recv trans_conn err: {0}".format(e))
             try:
                 trans_conn.shutdown(socket.SHUT_RDWR)
                 trans_conn.close()

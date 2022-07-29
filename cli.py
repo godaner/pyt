@@ -48,9 +48,8 @@ class Cli:
             while 1:
                 app_conn, addr = listen.accept()
                 self.app_conns.append(app_conn)
-                threading.Thread(target=self.__handle_app_conn, args=(app_conn, addr)).start()
+                threading.Thread(target=self.__handle_app_conn, args=(app_conn,)).start()
         except BaseException as e:
-            self.logger.error("listen accept app_conn err: {0}".format(e))
             try:
                 listen.shutdown(socket.SHUT_RDWR)
                 listen.close()
@@ -75,7 +74,8 @@ class Cli:
                 ...
         self.trans_conns = []
 
-    def __handle_app_conn(self, app_conn: socket.socket, app_conn_addr):
+    def __handle_app_conn(self, app_conn: socket.socket):
+        app_conn_addr = app_conn.getpeername()
         trans_conn = socket.socket()
         try:
             trans_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -93,14 +93,13 @@ class Cli:
                     raise Exception("EOF")
                 trans_conn.send(bs)
         except BaseException as e:
-            self.logger.error("recv app_conn conn err: {0}".format(e))
             self.logger.error(
-                "closing accept {}:{} <-> {}:{}".format(app_conn_addr[0], app_conn_addr[1], self.local_host,
-                                                        self.local_port))
+                "closing accept {}:{} <-> {}:{}, {}".format(app_conn_addr[0], app_conn_addr[1], self.local_host,
+                                                            self.local_port, e))
             try:
                 self.logger.error(
-                    "closing relay {}:{} <-> {}:{}".format(trans_conn_addr[0], trans_conn_addr[1], self.server_host,
-                                                           self.server_port))
+                    "closing relay {}:{} <-> {}:{}, {}".format(trans_conn_addr[0], trans_conn_addr[1], self.server_host,
+                                                               self.server_port, e))
             except BaseException as ee:
                 ...
             try:
@@ -122,7 +121,6 @@ class Cli:
                     raise Exception("EOF")
                 app_conn.send(bs)
         except BaseException as e:
-            self.logger.error("recv app_conn err: {0}".format(e))
             try:
                 app_conn.shutdown(socket.SHUT_RDWR)
                 app_conn.close()
