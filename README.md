@@ -9,6 +9,7 @@ transparent agent
 ### Usage
 
 ##### shadowsocks-local,don't need change
+> Download url: https://github.com/shadowsocks/go-shadowsocks2/releases
 
 ```
 nohup ./go-shadowsocks2 -c 'ss://AEAD_CHACHA20_POLY1305:123qwe@127.0.0.1:1555' -socks :1080 -verbose  >  ssc.log  2>&1  &
