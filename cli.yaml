@@ -1,0 +1,7 @@
+server:
+  host: 127.0.0.1
+  port: 33354
+local:
+  host: 127.0.0.1
+  port: 1555
+debug: true
