@@ -48,7 +48,6 @@ class Srv:
         while 1:
             try:
                 trans_conn, addr = listen.accept()
-                self.logger.info("accept trans_conn addr: {0}".format(addr))
                 threading.Thread(target=self.__handle_trans_conn, args=(trans_conn, addr)).start()
             except BaseException as e:
                 self.logger.error("listen accept trans_conn err: {0}".format(e))
@@ -60,14 +59,17 @@ class Srv:
                 self.__when_listen_close()
                 raise e
 
-    def __handle_trans_conn(self, trans_conn: socket.socket, addr):
-        self.logger.info("accept trans_conn: {0}".format(addr))
+    def __handle_trans_conn(self, trans_conn: socket.socket, trans_conn_addr):
         remote_conn = socket.socket()
         try:
             remote_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             remote_conn.connect((self.server_host, self.server_port))
+            remote_conn_addr = remote_conn.getsockname()
             self.remote_conns.append(remote_conn)
-            self.logger.info("create {0}:{1} <-> {2}:{3}".format(addr[0], addr[1], self.server_host, self.server_port))
+            self.logger.info("accept {}:{} <-> {}:{}".format(trans_conn_addr[0], trans_conn_addr[1], self.local_host,
+                                                             self.local_port))
+            self.logger.info("relay {}:{} <-> {}:{}".format(remote_conn_addr[0], remote_conn_addr[1], self.server_host,
+                                                            self.server_port))
             threading.Thread(target=self.__handle_remote_conn, args=(trans_conn, remote_conn)).start()
             while 1:
                 bs = trans_conn.recv(1024)
@@ -77,16 +79,23 @@ class Srv:
         except BaseException as e:
             self.logger.error("recv trans_conn conn err: {0}".format(e))
             self.logger.error(
-                "closing {0}:{1} <-> {2}:{3}".format(addr[0], addr[1], self.server_host, self.server_port))
+                "closing accept {}:{} <-> {}:{}".format(trans_conn_addr[0], trans_conn_addr[1], self.local_host,
+                                                        self.local_port))
+            try:
+                self.logger.error(
+                    "closing relay {}:{} <-> {}:{}".format(remote_conn_addr[0], remote_conn_addr[1], self.server_host,
+                                                           self.server_port))
+            except BaseException as ee:
+                ...
             try:
                 trans_conn.shutdown(socket.SHUT_RDWR)
                 trans_conn.close()
-            except BaseException as e:
+            except BaseException as ee:
                 ...
             try:
                 remote_conn.shutdown(socket.SHUT_RDWR)
                 remote_conn.close()
-            except BaseException as e:
+            except BaseException as ee:
                 ...
 
     def __handle_remote_conn(self, trans_conn: socket.socket, remote_conn: socket.socket):
@@ -99,10 +108,12 @@ class Srv:
         except BaseException as e:
             self.logger.error("recv trans_conn err: {0}".format(e))
             try:
+                trans_conn.shutdown(socket.SHUT_RDWR)
                 trans_conn.close()
             except BaseException as e:
                 ...
             try:
+                remote_conn.shutdown(socket.SHUT_RDWR)
                 remote_conn.close()
             except BaseException as e:
                 ...
