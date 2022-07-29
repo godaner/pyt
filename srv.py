@@ -67,6 +67,7 @@ class Srv:
             remote_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             remote_conn.connect((self.server_host, self.server_port))
             self.remote_conns.append(remote_conn)
+            self.logger.info("create {0}:{1} <-> {2}:{3}".format(addr[0], addr[1], self.server_host, self.server_port))
             threading.Thread(target=self.__handle_remote_conn, args=(trans_conn, remote_conn)).start()
             while 1:
                 remote_conn.send(trans_conn.recv(1024))

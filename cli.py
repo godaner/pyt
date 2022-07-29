@@ -36,6 +36,9 @@ class Cli:
             self.logger.info("get local host from config fail: {0}".format(e))
             raise e
 
+    def __str__(self):
+        return str(self.conf)
+
     def start(self):
         listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         listen.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -79,6 +82,7 @@ class Cli:
             trans_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             trans_conn.connect((self.server_host, self.server_port))
             self.trans_conns.append(trans_conn)
+            self.logger.info("create {0}:{1} <-> {2}:{3}".format(addr[0], addr[1], self.server_host, self.server_port))
             threading.Thread(target=self.__handle_trans_conn, args=(app_conn, trans_conn)).start()
             while 1:
                 trans_conn.send(app_conn.recv(1024))
