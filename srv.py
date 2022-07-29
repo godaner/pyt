@@ -70,7 +70,10 @@ class Srv:
             self.logger.info("create {0}:{1} <-> {2}:{3}".format(addr[0], addr[1], self.server_host, self.server_port))
             threading.Thread(target=self.__handle_remote_conn, args=(trans_conn, remote_conn)).start()
             while 1:
-                remote_conn.send(trans_conn.recv(1024))
+                bs = trans_conn.recv(1024)
+                if len(bs) == 0:
+                    raise Exception("EOF")
+                remote_conn.send(bs)
         except BaseException as e:
             self.logger.error("recv trans_conn conn err: {0}".format(e))
             self.logger.error(
@@ -89,7 +92,10 @@ class Srv:
     def __handle_remote_conn(self, trans_conn: socket.socket, remote_conn: socket.socket):
         try:
             while 1:
-                trans_conn.send(remote_conn.recv(1024))
+                bs = remote_conn.recv(1024)
+                if len(bs) == 0:
+                    raise Exception("EOF")
+                trans_conn.send(bs)
         except BaseException as e:
             self.logger.error("recv trans_conn err: {0}".format(e))
             try:

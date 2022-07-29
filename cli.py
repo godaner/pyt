@@ -85,7 +85,10 @@ class Cli:
             self.logger.info("create {0}:{1} <-> {2}:{3}".format(addr[0], addr[1], self.server_host, self.server_port))
             threading.Thread(target=self.__handle_trans_conn, args=(app_conn, trans_conn)).start()
             while 1:
-                trans_conn.send(app_conn.recv(1024))
+                bs = app_conn.recv(1024)
+                if len(bs) == 0:
+                    raise Exception("EOF")
+                trans_conn.send(bs)
         except BaseException as e:
             self.logger.error("recv app_conn conn err: {0}".format(e))
             self.logger.error(
@@ -104,7 +107,10 @@ class Cli:
     def __handle_trans_conn(self, app_conn: socket.socket, trans_conn: socket.socket):
         try:
             while 1:
-                app_conn.send(trans_conn.recv(1024))
+                bs = trans_conn.recv(1024)
+                if len(bs) == 0:
+                    raise Exception("EOF")
+                app_conn.send(bs)
         except BaseException as e:
             self.logger.error("recv app_conn err: {0}".format(e))
             try:
