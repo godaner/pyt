@@ -88,6 +88,8 @@ class Cli:
                 trans_conn.send(app_conn.recv(1024))
         except BaseException as e:
             self.logger.error("recv app_conn conn err: {0}".format(e))
+            self.logger.error(
+                "closing {0}:{1} <-> {2}:{3}".format(addr[0], addr[1], self.server_host, self.server_port))
             try:
                 app_conn.shutdown(socket.SHUT_RDWR)
                 app_conn.close()

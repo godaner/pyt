@@ -73,6 +73,8 @@ class Srv:
                 remote_conn.send(trans_conn.recv(1024))
         except BaseException as e:
             self.logger.error("recv trans_conn conn err: {0}".format(e))
+            self.logger.error(
+                "closing {0}:{1} <-> {2}:{3}".format(addr[0], addr[1], self.server_host, self.server_port))
             try:
                 trans_conn.shutdown(socket.SHUT_RDWR)
                 trans_conn.close()
