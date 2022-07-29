@@ -51,7 +51,7 @@ class Cli:
             try:
                 listen.shutdown(socket.SHUT_RDWR)
                 listen.close()
-            except BaseException as e:
+            except BaseException as ee:
                 ...
             self.__when_listen_close()
             raise e

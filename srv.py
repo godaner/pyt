@@ -55,7 +55,7 @@ class Srv:
                 try:
                     listen.shutdown(socket.SHUT_RDWR)
                     listen.close()
-                except BaseException as e:
+                except BaseException as ee:
                     ...
                 self.__when_listen_close()
                 raise e
@@ -86,7 +86,7 @@ class Srv:
     def __handle_remote_conn(self, trans_conn: socket.socket, remote_conn: socket.socket):
         try:
             while 1:
-                trans_conn.send(trans_conn.recv(1024))
+                trans_conn.send(remote_conn.recv(1024))
         except BaseException as e:
             self.logger.error("recv trans_conn err: {0}".format(e))
             try:
