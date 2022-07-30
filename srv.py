@@ -73,7 +73,7 @@ class Srv:
                                                self._server_port))
             threading.Thread(target=self._handle_remote_conn, args=(trans_conn, remote_conn)).start()
             while 1:
-                bs = trans_conn.recv(1024)
+                bs = trans_conn.recv(40960)
                 if len(bs) == 0:
                     raise Exception("EOF")
                 remote_conn.send(bs)
@@ -102,7 +102,7 @@ class Srv:
     def _handle_remote_conn(self, trans_conn: socket.socket, remote_conn: socket.socket):
         try:
             while 1:
-                bs = remote_conn.recv(1024)
+                bs = remote_conn.recv(40960)
                 if len(bs) == 0:
                     raise Exception("EOF")
                 trans_conn.send(bs)

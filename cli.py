@@ -89,7 +89,7 @@ class Cli:
                                                              self._server_port))
             threading.Thread(target=self._handle_trans_conn, args=(app_conn, trans_conn)).start()
             while 1:
-                bs = app_conn.recv(1024)
+                bs = app_conn.recv(40960)
                 if len(bs) == 0:
                     raise Exception("EOF")
                 trans_conn.send(bs)
@@ -118,7 +118,7 @@ class Cli:
     def _handle_trans_conn(self, app_conn: socket.socket, trans_conn: socket.socket):
         try:
             while 1:
-                bs = trans_conn.recv(1024)
+                bs = trans_conn.recv(40960)
                 if len(bs) == 0:
                     raise Exception("EOF")
                 app_conn.send(bs)
