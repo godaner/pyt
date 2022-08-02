@@ -9,7 +9,9 @@ import sock
 p = 22222
 
 
-def listen():
+def listen(e: threading.Event):
+    e.wait(1)
+    print("listen wait finish")
     try:
 
         lis = sock.sock(socket.AF_INET, socket.SOCK_STREAM)
@@ -26,7 +28,9 @@ def listen():
         # lis.close()
 
 
-def connect():
+def connect(e: threading.Event):
+    e.wait(1)
+    print("connect wait finish")
     try:
         s = sock.sock(socket.AF_INET, socket.SOCK_STREAM)
         s.connect(("127.0.0.1", 22222))
@@ -39,9 +43,10 @@ def connect():
 
 
 def main():
-    threading.Thread(target=listen).start()
+    e = threading.Event()
+    threading.Thread(target=listen, args=(e,)).start()
     time.sleep(1)
-    connect()
+    connect(e)
 
 
 if __name__ == "__main__":
