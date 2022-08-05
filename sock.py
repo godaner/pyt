@@ -11,6 +11,7 @@ import protocol
 # status
 STATUS_CLOSED = "STATUS_CLOSED"
 STATUS_SYN_SENT = "STATUS_SYN_SENT"
+STATUS_SYN_RCVD = "STATUS_SYN_RCVD"
 STATUS_ESTABLISHED = "STATUS_ESTABLISHED"
 
 STATUS_FIN_WAIT_1 = "STATUS_FIN_WAIT_1"
@@ -22,7 +23,8 @@ STATUS_LAST_ACK = "STATUS_LAST_ACK"
 # event
 EVENT_CLI_SEND_SYN1 = "EVENT_CLI_SEND_SYN1"
 EVENT_SRV_RECV_SYN1_AND_SEND_SYN2 = "EVENT_SRV_RECV_SYN1_AND_SEND_SYN2"
-EVENT_CLI_RECV_SYN2 = "EVENT_CLI_RECV_SYN2"
+EVENT_CLI_RECV_SYN2_AND_SEND_SYN3 = "EVENT_CLI_RECV_SYN2_AND_SEND_SYN3"
+EVENT_SRV_RECV_SYN3 = "EVENT_SRV_RECV_SYN3"
 
 EVENT_SEND_FIN1 = "EVENT_SEND_FIN1"
 EVENT_RECV_FIN1_AND_SEND_FIN2 = "EVENT_RECV_FIN1_AND_SEND_FIN2"
@@ -48,24 +50,29 @@ class innerSock(socket.socket):
         self._peer_addr = peer_addr
         self._logger = logging.getLogger()
         self._cli_wait_syn2_event = threading.Event()
+        self._srv_wait_syn3_event = threading.Event()
+        self._srv_recv_syn1_and_send_syn2_flag = False
         self._fsm = transitions.Machine(model=self,
-                                        states=[STATUS_CLOSED, STATUS_SYN_SENT, STATUS_ESTABLISHED,
+                                        states=[STATUS_CLOSED, STATUS_SYN_RCVD, STATUS_SYN_SENT, STATUS_ESTABLISHED,
                                                 STATUS_FIN_WAIT_1,
                                                 STATUS_FIN_WAIT_2, STATUS_TIME_WAIT, STATUS_CLOSE_WAIT,
                                                 STATUS_LAST_ACK],
                                         initial=STATUS_CLOSED)
         # SYN
         self._fsm.add_transition(trigger=EVENT_CLI_SEND_SYN1, source=STATUS_CLOSED, dest=STATUS_SYN_SENT,
-                                 after=self._cli_send_syn1)
-        self._fsm.add_transition(trigger=EVENT_SRV_RECV_SYN1_AND_SEND_SYN2, source=[STATUS_CLOSED, STATUS_ESTABLISHED],
-                                 dest=STATUS_ESTABLISHED,
-                                 after=self._srv_recv_syn1_and_send_syn2)
+                                 before=self._cli_send_syn1)
+        self._fsm.add_transition(trigger=EVENT_SRV_RECV_SYN1_AND_SEND_SYN2, source=[STATUS_CLOSED, STATUS_SYN_RCVD],
+                                 dest=STATUS_SYN_RCVD,
+                                 before=self._srv_recv_syn1_and_send_syn2)
 
-        self._fsm.add_transition(trigger=EVENT_CLI_RECV_SYN2,
+        self._fsm.add_transition(trigger=EVENT_CLI_RECV_SYN2_AND_SEND_SYN3,
                                  source=[STATUS_SYN_SENT, STATUS_ESTABLISHED],
                                  dest=STATUS_ESTABLISHED,
-                                 after=self._cli_recv_syn2)
-
+                                 before=self._cli_recv_syn2_and_send_syn3)
+        self._fsm.add_transition(trigger=EVENT_SRV_RECV_SYN3,
+                                 source=[STATUS_SYN_RCVD, STATUS_ESTABLISHED],
+                                 dest=STATUS_ESTABLISHED,
+                                 before=self._srv_recv_syn3)
         # FIN
         '''
         self._fsm.add_transition(trigger=EVENT_SEND_FIN1, source=STATUS_ESTABLISHED, dest=STATUS_FIN_WAIT_1,
@@ -88,53 +95,89 @@ class innerSock(socket.socket):
                                  before=self._wait_2msl)
         '''
 
-    def get_ori_socket(self) -> socket.socket:
-        return self._sock
-
-    def _cli_send_syn1(self) -> None:
+    def _cli_send_syn1_async(self) -> None:
         c = 0
         while 1:
-            self._logger.debug("_cli_send_syn1, seq: {}".format(self._seq))
+            self._logger.info("_cli_send_syn1, seq: {}".format(self._seq))
             bs = protocol.serialize(protocol.package(flag=protocol.FLAG_SYN, seq=1))
             self._sock.sendto(bs, self._peer_addr)
             c += 1
-            self._cli_wait_syn2_event.wait(0.1)
-            if self._cli_wait_syn2_event.set():
+            self._cli_wait_syn2_event.wait(0.5)
+            if self._cli_wait_syn2_event.is_set():
                 return
             if c > 10:
                 raise Exception("syn timeout")
 
-    def _srv_recv_syn1_and_send_syn2(self, pkg: protocol.package, accept_queue: queue.Queue) -> None:
-        self._logger.debug("_srv_recv_syn1_and_send_syn2, seq: {}".format(pkg.seq))
-        bs = protocol.serialize(
-            protocol.package(flag=protocol.FLAG_SYN | protocol.FLAG_ACK, seq=self._seq, ack=pkg.seq + 1))
-        self._sock.sendto(bs, self._peer_addr)
-        if self._fsm.before_state_change == STATUS_CLOSED:
-            accept_queue.put(self)
+    def _cli_send_syn1(self) -> None:
+        threading.Thread(target=self._cli_send_syn1_async, args=()).start()
 
-    def _cli_recv_syn2(self, pkg: protocol.package) -> None:
-        if self._fsm. != STATUS_SYN_SENT:
+    def _srv_recv_syn1_and_send_syn2(self, pkg: protocol.package) -> None:
+        threading.Thread(target=self._srv_recv_syn1_and_send_syn2_async, args=(pkg,)).start()
+
+    def _srv_recv_syn1_and_send_syn2_async(self, pkg: protocol.package) -> None:
+        if self._srv_recv_syn1_and_send_syn2_flag:
             return
-        self._logger.debug("_cli_recv_syn2, seq: {}, ack: {}".format(pkg.seq, pkg.ack))
+        self._srv_recv_syn1_and_send_syn2_flag = True
+        c = 0
+        while 1:
+            self._logger.info("_srv_recv_syn1_and_send_syn2, seq: {}".format(pkg.seq))
+            bs = protocol.serialize(
+                protocol.package(flag=protocol.FLAG_SYN | protocol.FLAG_ACK, seq=self._seq, ack=pkg.seq + 1))
+            self._sock.sendto(bs, self._peer_addr)
+            c += 1
+            self._srv_wait_syn3_event.wait(0.5)
+            if self._srv_wait_syn3_event.is_set():
+                return
+            if c > 10:
+                raise Exception("syn timeout")
+
+    def _cli_recv_syn2_and_send_syn3(self, pkg: protocol.package) -> None:
+        self._logger.info("_cli_recv_syn2_and_send_syn3, seq: {}, ack: {}".format(pkg.seq, pkg.ack))
         if pkg.ack != self._seq + 1:
             raise Exception(
-                "_cli_recv_syn2 ack err, want ack: {}, pkg ack: {}".format(self._seq + 1, pkg.ack))
+                "_cli_recv_syn2_and_send_syn3 ack err, want ack: {}, pkg ack: {}".format(self._seq + 1, pkg.ack))
         self._cli_wait_syn2_event.set()
+        bs = protocol.serialize(protocol.package(flag=protocol.FLAG_ACK, seq=pkg.ack, ack=self._seq + 1))
+        self._sock.sendto(bs, self._peer_addr)
+
+    def _srv_recv_syn3(self, pkg: protocol.package,
+                       accept_queue: queue.Queue) -> None:
+        if self._fsm.is_state(STATUS_SYN_RCVD, self):
+            self._logger.info("_srv_recv_syn3, seq: {}, ack: {}".format(pkg.seq, pkg.ack))
+            if pkg.ack != self._seq + 1:
+                raise Exception(
+                    "_srv_recv_syn3 ack err, want ack: {}, pkg ack:{}".format(self._seq + 1, pkg.ack))
+            self._srv_wait_syn3_event.set()
+            accept_queue.put(self)
 
     def recv_pkg(self, bs: bytes, accept_queue: queue.Queue = None):
         pkg = protocol.un_serialize(bs)
-        if self._t == type_srv and pkg.eq_flag(protocol.FLAG_SYN):
-            self.trigger(EVENT_SRV_RECV_SYN1_AND_SEND_SYN2, pkg, accept_queue)
-            return
-        if self._t == type_cli and pkg.eq_flag(protocol.FLAG_SYN | protocol.FLAG_ACK):
-            self.trigger(EVENT_CLI_RECV_SYN2, pkg)
-            return
-        self._logger.error("can not find pkg handle")
+        try:
+            if self._t == type_srv and pkg.eq_flag(protocol.FLAG_SYN):
+                self.trigger(EVENT_SRV_RECV_SYN1_AND_SEND_SYN2, pkg)
+                return
+            if self._t == type_cli and pkg.eq_flag(protocol.FLAG_SYN | protocol.FLAG_ACK):
+                self.trigger(EVENT_CLI_RECV_SYN2_AND_SEND_SYN3, pkg)
+                return
+            if self._t == type_srv and pkg.eq_flag(protocol.FLAG_ACK):
+                self.trigger(EVENT_SRV_RECV_SYN3, pkg, accept_queue)
+                return
+            self._logger.error("can not find pkg handle")
+        except transitions.core.MachineError as e:
+            # self._logger.error(traceback.format_exc())
+            self._logger.error(e)
+        except BaseException as e:
+            self._logger.error(traceback.format_exc())
+            # self._logger.error(e)
 
     def connect(self, address) -> None:
         self._t = type_cli
         threading.Thread(target=self._connect_recv_bs, args=()).start()
-        self.trigger(EVENT_CLI_SEND_SYN1)
+        try:
+            self.trigger(EVENT_CLI_SEND_SYN1)
+        except transitions.core.MachineError as e:
+            # self._logger.error(traceback.format_exc())
+            self._logger.error(e)
 
     def _connect_recv_bs(self):
         while 1:

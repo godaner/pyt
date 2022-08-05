@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import logging
 import socket
 import threading
 import time
@@ -43,6 +44,8 @@ def connect(e: threading.Event):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s %(levelname)s %(pathname)s:%(lineno)d %(thread)s %(message)s')
     e = threading.Event()
     threading.Thread(target=listen, args=(e,)).start()
     time.sleep(1)
