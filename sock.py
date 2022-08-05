@@ -159,7 +159,8 @@ class innerSock(socket.socket):
             if self._t == type_cli and pkg.eq_flag(protocol.FLAG_SYN | protocol.FLAG_ACK):
                 self.trigger(EVENT_CLI_RECV_SYN2_AND_SEND_SYN3, pkg)
                 return
-            if self._t == type_srv and pkg.eq_flag(protocol.FLAG_ACK):
+            if self._t == type_srv and (self._fsm.is_state(STATUS_SYN_RCVD, self) or self._fsm.is_state(
+                    STATUS_ESTABLISHED, self)) and pkg.eq_flag(protocol.FLAG_ACK):
                 self.trigger(EVENT_SRV_RECV_SYN3, pkg, accept_queue)
                 return
             self._logger.error("can not find pkg handle")
