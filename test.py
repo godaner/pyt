@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import logging
 import socket
+import sys
 import threading
 import time
 import traceback
@@ -43,6 +44,18 @@ def connect(e: threading.Event):
         # s.close()
 
 
+def d(l: threading.Lock):
+    time.sleep(1)
+    print("acquire s")
+    print("acquire e", l.acquire())
+
+
+def main1():
+    x = lambda: sys.exit(0);
+    sys.stdout.write("...")
+    x()
+
+
 def main():
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s %(levelname)s %(pathname)s:%(lineno)d %(thread)s %(message)s')
@@ -53,4 +66,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main1()

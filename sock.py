@@ -42,8 +42,12 @@ type_srv = 0x00000002
 
 
 class innerSock(socket.socket):
-
     def __init__(self, sock: socket.socket, peer_addr) -> None:
+        self._app_notify_send = queue.Queue(1)
+        self._notify_app_read = queue.Queue(1)
+        self._wait_send_bs = bytes()
+        self._recvd_seq = {}
+        self._recvd_bs = bytes()
         self._t = type_srv
         self._seq = 1
         self._sock = sock
@@ -163,6 +167,13 @@ class innerSock(socket.socket):
                     STATUS_ESTABLISHED, self)) and pkg.eq_flag(protocol.FLAG_ACK):
                 self.trigger(EVENT_SRV_RECV_SYN3, pkg, accept_queue)
                 return
+
+            if self._fsm.is_state(STATUS_ESTABLISHED, self) and pkg.eq_flag(protocol.FLAG_PAYLOAD | protocol.FLAG_ACK):
+                self.recv_payload_ack(pkg)
+                return
+            if self._fsm.is_state(STATUS_ESTABLISHED, self) and pkg.eq_flag(protocol.FLAG_PAYLOAD):
+                self.recv_payload(pkg)
+                return
             self._logger.error("can not find pkg handle")
         except transitions.core.MachineError as e:
             # self._logger.error(traceback.format_exc())
@@ -170,6 +181,23 @@ class innerSock(socket.socket):
         except BaseException as e:
             self._logger.error(traceback.format_exc())
             # self._logger.error(e)
+
+    def recv_payload_ack(self, pkg: protocol.package) -> None:
+        
+        self.send(flag=(protocol.FLAG_PAYLOAD), ack=self._seq + 1)
+
+    def recv_payload(self, pkg: protocol.package) -> None:
+        if self._recvd_seq.get(pkg.seq) is None:
+            self._recvd_seq[pkg.seq] = True
+            if pkg.seq == self._seq + 1:
+                self._seq += 1
+                self._recvd_bs += pkg.payload
+                self._notify_app_read.put(True, block=False)
+        self.send(flag=(protocol.FLAG_PAYLOAD | protocol.FLAG_ACK), ack=self._seq + 1)
+
+    def send(self, flag: int = 0, seq: int = 0, ack: int = 0, payload: bytes = bytes()) -> None:
+        self._sock.sendto(protocol.serialize(protocol.package(flag=flag, seq=seq, ack=ack, payload=payload)),
+                          self._peer_addr)
 
     def connect(self, address) -> None:
         self._t = type_cli
@@ -198,10 +226,16 @@ class innerSock(socket.socket):
             return ("unknown", "unknown")
 
     def recv(self, bufsize: int, flags: int = ...) -> bytes:
-        pass
+        while len(self._recvd_bs) < bufsize:
+            self._notify_app_read.get()
+        bs = self._recvd_bs[:bufsize]
+        self._recvd_bs = self._recvd_bs[bufsize:]
+        return bs
 
     def send(self, data: bytes, flags: int = ...) -> int:
-        pass
+        self._wait_send_bs += data
+        self._app_notify_send.put(True, block=False)
+        return len(data)
 
     def shutdown(self, how: int) -> None:
         self._sock.shutdown(how)
